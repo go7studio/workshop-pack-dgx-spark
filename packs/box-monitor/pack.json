@@ -1,0 +1,525 @@
+{
+  "id": "box-monitor",
+  "name": "Box monitor",
+  "version": "1.0.0",
+  "contract": 1,
+  "description": "DGX Spark health and the training job it runs: GPU %, watts, one writer, loaded models, live step and last-8 rate, durable save, hours to the token floor, fence labels. Read-only.",
+  "homepage": "https://github.com/go7studio/workshop-pack-dgx-spark",
+  "collector": "collector",
+  "sources": [
+    {
+      "id": "feed",
+      "kind": "json",
+      "path": "feed",
+      "pollMs": 2000,
+      "freshMs": 120000,
+      "asOf": "/asOf",
+      "schema": "go7-workshop-feed/v0",
+      "maxBytes": 262144
+    },
+    {
+      "id": "infer",
+      "kind": "probes",
+      "probes": [
+        "healthz",
+        "readyz",
+        "models"
+      ],
+      "pollMs": 5000
+    }
+  ],
+  "strip": [
+    {
+      "w": "ring",
+      "of": "feed:/gpuUtilPercent",
+      "size": 44
+    },
+    {
+      "w": "text",
+      "of": "feed:/powerWatts",
+      "fmt": "watts"
+    },
+    {
+      "w": "text",
+      "of": "feed:/oneWriter",
+      "fmt": "writer"
+    },
+    {
+      "w": "switch",
+      "cases": [
+        {
+          "when": "desk:/host/emptyCapabilities",
+          "is": true,
+          "paint": {
+            "w": "text",
+            "value": "Local Compute host has no allowed capabilities"
+          }
+        },
+        {
+          "when": "infer:/models/ids",
+          "has": true,
+          "paint": {
+            "w": "chips",
+            "of": "infer:/models/ids",
+            "tone": "mute"
+          }
+        },
+        {
+          "when": "feed:/exclusiveSidecar/probeUnit",
+          "is": "active",
+          "paint": {
+            "w": "meta",
+            "parts": [
+              {
+                "value": "infer down / train exclusive"
+              },
+              {
+                "of": "infer:/readyz/detail"
+              }
+            ]
+          }
+        }
+      ],
+      "else": {
+        "w": "text",
+        "of": "infer:/readyz/status",
+        "fmt": "map",
+        "map": {
+          "down": "infer down",
+          "unauthorized": "infer unauthorized",
+          "ok": "infer up"
+        }
+      }
+    },
+    {
+      "w": "bar",
+      "num": "feed:/job/live/tokensSeen",
+      "den": "feed:/job/durable/targetTokens",
+      "showPct": false
+    },
+    {
+      "w": "text",
+      "of": "feed:/job/derived/tokPerParam",
+      "fmt": "fixed2",
+      "suffix": " tpp"
+    },
+    {
+      "w": "text",
+      "of": "feed:/job/derived/hoursToFloor",
+      "fmt": "hours"
+    },
+    {
+      "w": "flags",
+      "of": "feed:/job/flags",
+      "words": {
+        "two-trainers": "two trainers",
+        "qwen-up-during-train": "qwen up",
+        "gpu-idle": "gpu idle",
+        "step-backwards": "step back"
+      }
+    }
+  ],
+  "cards": [
+    {
+      "title": "Box",
+      "rows": [
+        {
+          "w": "hbox",
+          "children": [
+            {
+              "w": "ring",
+              "of": "feed:/gpuUtilPercent",
+              "size": 56
+            },
+            {
+              "w": "kv",
+              "label": "Watts",
+              "of": "feed:/powerWatts",
+              "fmt": "watts"
+            },
+            {
+              "w": "kv",
+              "label": "Writer",
+              "of": "feed:/oneWriter",
+              "fmt": "writer"
+            },
+            {
+              "w": "kv",
+              "label": "GPU",
+              "of": "feed:/job/gpuName",
+              "fmt": "strip",
+              "strip": "NVIDIA ",
+              "title": {
+                "value": "nvidia-smi name. Memory is N/A on Spark UMA and is not shown."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Models",
+      "name": {
+        "of": "infer:/models/count",
+        "fmt": "int"
+      },
+      "aside": {
+        "w": "switch",
+        "cases": [
+          {
+            "when": "infer:/models/ids",
+            "has": false,
+            "paint": {
+              "w": "switch",
+              "cases": [
+                {
+                  "when": "feed:/exclusiveSidecar/probeUnit",
+                  "is": "active",
+                  "paint": {
+                    "w": "text",
+                    "value": "train exclusive",
+                    "tone": "mute"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "rows": [
+        {
+          "w": "switch",
+          "cases": [
+            {
+              "when": "desk:/host/emptyCapabilities",
+              "is": true,
+              "paint": {
+                "w": "text",
+                "value": "Local Compute host has no allowed capabilities"
+              }
+            },
+            {
+              "when": "infer:/models/ids",
+              "has": true,
+              "paint": {
+                "w": "chips",
+                "of": "infer:/models/ids",
+                "tone": "mute"
+              }
+            },
+            {
+              "when": "feed:/exclusiveSidecar/probeUnit",
+              "is": "active",
+              "paint": {
+                "w": "meta",
+                "parts": [
+                  {
+                    "value": "infer down / train exclusive"
+                  },
+                  {
+                    "of": "infer:/readyz/detail"
+                  }
+                ]
+              }
+            }
+          ],
+          "else": {
+            "w": "text",
+            "value": "—"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Infer",
+      "rows": [
+        {
+          "w": "probes",
+          "of": "infer"
+        }
+      ]
+    },
+    {
+      "title": "Router",
+      "rows": [
+        {
+          "w": "kv",
+          "label": "Train fence",
+          "value": "nvidia-spark-train-infer"
+        },
+        {
+          "w": "kv",
+          "label": "Infer invoke",
+          "value": "Local Compute"
+        },
+        {
+          "w": "kv",
+          "label": "probeUnit",
+          "of": "feed:/exclusiveSidecar/probeUnit"
+        },
+        {
+          "w": "kv",
+          "label": "qwen",
+          "of": "feed:/exclusiveSidecar/qwenParked",
+          "fmt": "map",
+          "map": {
+            "true": "parked",
+            "false": "up"
+          }
+        },
+        {
+          "w": "note",
+          "value": "labels only, never route/lease/start/stop"
+        }
+      ]
+    },
+    {
+      "title": "Job",
+      "name": {
+        "of": "status:/feed/present",
+        "fmt": "map",
+        "map": {
+          "true": "Bloom soak"
+        }
+      },
+      "aside": {
+        "w": "flags",
+        "of": "feed:/job/flags",
+        "words": {
+          "two-trainers": "two trainers",
+          "qwen-up-during-train": "qwen up",
+          "gpu-idle": "gpu idle",
+          "step-backwards": "step back"
+        }
+      },
+      "rows": [
+        {
+          "w": "meta",
+          "parts": [
+            {
+              "of": "feed:/job/lease/yaml",
+              "fmt": "basename"
+            },
+            {
+              "of": "feed:/job/lease/kind"
+            },
+            {
+              "of": "feed:/job/lease/pid",
+              "fmt": "int",
+              "prefix": "pid "
+            },
+            {
+              "of": "feed:/job/lease/startedUtc",
+              "fmt": "wall"
+            }
+          ],
+          "title": {
+            "of": "feed:/job/durable/runName"
+          }
+        },
+        {
+          "w": "bar",
+          "num": "feed:/job/live/tokensSeen",
+          "den": "feed:/job/durable/targetTokens",
+          "label": "tokens seen toward target"
+        },
+        {
+          "w": "pair",
+          "a": {
+            "of": "feed:/job/derived/tokPerParam",
+            "fmt": "fixed2",
+            "sub": {
+              "of": "feed:/job/derived/targetTokPerParam",
+              "fmt": "fixed1",
+              "prefix": "/ ",
+              "suffix": " tok/param"
+            }
+          },
+          "b": {
+            "of": "feed:/job/live/tokensSeen",
+            "fmt": "tokens",
+            "sub": {
+              "of": "feed:/job/durable/targetTokens",
+              "fmt": "tokens",
+              "prefix": "/ ",
+              "suffix": " tokens"
+            }
+          }
+        },
+        {
+          "w": "kv",
+          "label": "Live",
+          "parts": [
+            {
+              "of": "feed:/job/live/step",
+              "fmt": "int"
+            },
+            {
+              "of": "feed:/job/live/trainLoss",
+              "fmt": "fixed2",
+              "prefix": "loss "
+            }
+          ],
+          "title": {
+            "of": "feed:/job/live/logAsOf",
+            "prefix": "log "
+          }
+        },
+        {
+          "w": "kv",
+          "label": "Saved",
+          "parts": [
+            {
+              "of": "feed:/job/durable/step",
+              "fmt": "int"
+            },
+            {
+              "of": "feed:/job/durable/tokPerParam",
+              "fmt": "fixed2",
+              "suffix": " tpp"
+            },
+            {
+              "of": "feed:/job/durable/savedAt",
+              "fmt": "clock"
+            }
+          ],
+          "title": {
+            "of": "feed:/latestJson"
+          }
+        },
+        {
+          "w": "kv",
+          "label": "Last-8",
+          "parts": [
+            {
+              "of": "feed:/job/live/last8TokS",
+              "fmt": "int",
+              "suffix": " tok/s"
+            },
+            {
+              "of": "feed:/job/derived/secPerIt",
+              "fmt": "fixed1",
+              "suffix": " s/it"
+            }
+          ],
+          "title": {
+            "value": "Δtokens / Δelapsed over the last 480 s of step lines"
+          }
+        },
+        {
+          "w": "kv",
+          "label": "To floor",
+          "of": "feed:/job/derived/hoursToFloor",
+          "fmt": "hours",
+          "title": {
+            "of": "feed:/job/derived/remainTokens",
+            "fmt": "tokens",
+            "suffix": " tokens remain"
+          }
+        },
+        {
+          "w": "kv",
+          "label": "Status",
+          "parts": [
+            {
+              "of": "feed:/oneWriter",
+              "fmt": "map",
+              "map": {
+                "true": "running (one writer)",
+                "false": "two writers"
+              }
+            }
+          ]
+        },
+        {
+          "w": "switch",
+          "cases": [
+            {
+              "when": "feed:/job/durable/jobComplete",
+              "is": true,
+              "paint": {
+                "w": "kv",
+                "label": "Gate",
+                "value": "complete",
+                "title": {
+                  "value": "job_complete / undertrained_flag as the trainer wrote them"
+                }
+              }
+            },
+            {
+              "when": "feed:/job/durable/undertrainedFlag",
+              "is": true,
+              "paint": {
+                "w": "kv",
+                "label": "Gate",
+                "value": "undertrained",
+                "title": {
+                  "value": "job_complete / undertrained_flag as the trainer wrote them"
+                }
+              }
+            },
+            {
+              "when": "feed:/job/durable/jobComplete",
+              "is": false,
+              "paint": {
+                "w": "kv",
+                "label": "Gate",
+                "value": "open",
+                "title": {
+                  "value": "job_complete / undertrained_flag as the trainer wrote them"
+                }
+              }
+            }
+          ],
+          "else": {
+            "w": "kv",
+            "label": "Gate",
+            "value": "—",
+            "title": {
+              "value": "job_complete / undertrained_flag as the trainer wrote them"
+            }
+          }
+        },
+        {
+          "w": "kv",
+          "label": "latest.json",
+          "of": "feed:/latestJson",
+          "fmt": "basename",
+          "title": {
+            "of": "feed:/latestJson"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Feed",
+      "rows": [
+        {
+          "w": "switch",
+          "cases": [
+            {
+              "when": "status:/feed/present",
+              "is": true,
+              "paint": {
+                "w": "meta",
+                "parts": [
+                  {
+                    "value": "present"
+                  },
+                  {
+                    "of": "status:/feed/asOf",
+                    "fmt": "age"
+                  }
+                ]
+              }
+            }
+          ],
+          "else": {
+            "w": "note",
+            "value": "Feed not present. Every meter is —. This desk does not remote-install."
+          }
+        }
+      ]
+    }
+  ]
+}
