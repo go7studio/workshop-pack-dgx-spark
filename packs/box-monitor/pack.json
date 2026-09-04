@@ -1,7 +1,7 @@
 {
   "id": "box-monitor",
   "name": "Box monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "contract": 1,
   "description": "DGX Spark health and the training job it runs: GPU %, watts, one writer, loaded models, live step and last-8 rate, durable save, hours to the token floor, fence labels. Read-only.",
   "homepage": "https://github.com/go7studio/workshop-pack-dgx-spark",
@@ -68,15 +68,8 @@
           "when": "feed:/exclusiveSidecar/probeUnit",
           "is": "active",
           "paint": {
-            "w": "meta",
-            "parts": [
-              {
-                "value": "infer down / train exclusive"
-              },
-              {
-                "of": "infer:/readyz/detail"
-              }
-            ]
+            "w": "text",
+            "value": "infer down / train exclusive"
           }
         }
       ],
@@ -211,7 +204,7 @@
               "when": "feed:/exclusiveSidecar/probeUnit",
               "is": "active",
               "paint": {
-                "w": "meta",
+                "w": "text",
                 "parts": [
                   {
                     "value": "infer down / train exclusive"
@@ -225,7 +218,7 @@
           ],
           "else": {
             "w": "text",
-            "value": "—"
+            "value": "\u2014"
           }
         }
       ]
@@ -305,7 +298,6 @@
             },
             {
               "of": "feed:/job/lease/pid",
-              "fmt": "int",
               "prefix": "pid "
             },
             {
@@ -403,7 +395,7 @@
             }
           ],
           "title": {
-            "value": "Δtokens / Δelapsed over the last 480 s of step lines"
+            "value": "\u0394tokens / \u0394elapsed over the last 480 s of step lines"
           }
         },
         {
@@ -474,7 +466,7 @@
           "else": {
             "w": "kv",
             "label": "Gate",
-            "value": "—",
+            "value": "\u2014",
             "title": {
               "value": "job_complete / undertrained_flag as the trainer wrote them"
             }
@@ -516,7 +508,7 @@
           ],
           "else": {
             "w": "note",
-            "value": "Feed not present. Every meter is —. This desk does not remote-install."
+            "value": "Feed not present. Every meter is \u2014. This desk does not remote-install."
           }
         }
       ]
