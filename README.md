@@ -18,21 +18,36 @@ Workhorse → Settings → Skills → Workshop → **Add pack** → paste
 the highest tagged release, shows the exact URLs each pack will read, and asks
 which Local Compute host to read through. Confirm. The rail appears.
 
-Both packs read one document: `<host>/workshop/box-monitor/feed`. `job-log`
-declares `namespace: box-monitor` so it reads the same file.
+Both packs read one document: `<host>/workshop/v0/feed`. Each pack declares
+`namespace: "v0"` with `path: "feed"` so Workhorse's `packSourceUrls` joins to
+that gateway allowlist route. Schema stays `go7-workshop-feed/v0`.
+
+The live Spark gateway answers `/workshop/v0/feed` today. It does **not**
+serve `/workshop/box-monitor/feed` (404). Packs must match the gateway, not
+the reverse.
 
 ## Install the collector (Spark, operator only)
 
-From an NVIDIA Sync terminal on the Spark, as the operator:
+From an NVIDIA Sync terminal (or SSH host `Go7-DGX-Spark`) on the Spark, as
+the operator. Prefer the pack's 523-line collector at
+`~/.local/bin/workshop-feed.py` — not the short stub under
+`~/workloads/creative-llm/scripts/`.
 
 ```sh
-mkdir -p ~/.local/bin ~/.config/systemd/user
+mkdir -p ~/.local/bin ~/.config/systemd/user ~/.local/share/go7-workshop
 cp packs/box-monitor/collector/workshop-feed.py ~/.local/bin/
+chmod +x ~/.local/bin/workshop-feed.py
 cp packs/box-monitor/collector/go7-workshop-feed.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now go7-workshop-feed.timer
-python3 ~/.local/bin/workshop-feed.py --print | head -40
+systemctl --user start go7-workshop-feed.service
+python3 ~/.local/bin/workshop-feed.py --print | head -60
 ```
+
+The unit's `ExecStart` is `/usr/bin/python3 %h/.local/bin/workshop-feed.py`.
+After install, `feed.json` must include `job.live`, `job.derived`, and
+`job.live.last8TokS` (when the trainer is writing steps). A stub without those
+fields leaves the Job card as —.
 
 The collector writes `~/.local/share/go7-workshop/feed.json` every 30 s. A
 failed run keeps the last valid file. It reads:
@@ -56,11 +71,12 @@ ahead) so the desk only formats, and `job.flags`: `two-trainers`,
 
 ## Serve the feed (gateway, operator only)
 
-Add a read-only route on the Local Compute gateway that serves
-`~/.local/share/go7-workshop/feed.json` at `/workshop/box-monitor/feed` for
-the owner bearer. The probes (`/healthz`, `/readyz`, `/v1/models`) are the
-gateway's own. Nothing here talks to NVIDIA Sync; the Dashboard is the
-backdrop, not the score.
+The Local Compute gateway on this box already serves
+`~/.local/share/go7-workshop/feed.json` at `/workshop/v0/feed` for the owner
+bearer. Packs declare `namespace: "v0"` to match. Do not re-point the gateway
+to `/workshop/box-monitor/feed` to paper over a wrong pack path. The probes
+(`/healthz`, `/readyz`, `/v1/models`) are the gateway's own. Nothing here
+talks to NVIDIA Sync; the Dashboard is the backdrop, not the score.
 
 ## What this never does
 
@@ -74,3 +90,6 @@ Workhorse installs the highest semver tag (`v1.2.3`). Cut a tag to ship a
 change; a change to `sources` makes Workhorse ask users to confirm the pack
 again. `contract` in `pack.json` is the Workhorse vocabulary major, not this
 repo's version.
+
+Author rules (namespace join, confirm URLs, release cadence, never-list): see
+[PROCESS.md](PROCESS.md).

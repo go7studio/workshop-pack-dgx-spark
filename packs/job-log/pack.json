@@ -1,12 +1,12 @@
 {
   "id": "job-log",
   "name": "Job log",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "contract": 1,
   "description": "Read-only tail of the job Box monitor watches. Never start or stop.",
   "homepage": "https://github.com/go7studio/workshop-pack-dgx-spark",
   "sources": [
-    { "id": "feed", "kind": "json", "namespace": "box-monitor", "path": "feed", "pollMs": 5000, "freshMs": 120000, "asOf": "/asOf", "schema": "go7-workshop-feed/v0", "maxBytes": 262144 }
+    { "id": "feed", "kind": "json", "namespace": "v0", "path": "feed", "pollMs": 5000, "freshMs": 120000, "asOf": "/asOf", "schema": "go7-workshop-feed/v0", "maxBytes": 262144 }
   ],
   "strip": [
     { "w": "switch", "cases": [

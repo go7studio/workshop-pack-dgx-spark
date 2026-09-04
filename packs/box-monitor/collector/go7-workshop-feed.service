@@ -4,7 +4,8 @@ After=default.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 %h/workloads/creative-llm/scripts/workshop-feed.py
+ExecStart=/usr/bin/python3 %h/.local/bin/workshop-feed.py
 NoNewPrivileges=yes
 ProtectSystem=strict
 PrivateTmp=yes
+ReadWritePaths=%h/.local/share/go7-workshop
