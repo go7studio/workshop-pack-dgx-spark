@@ -1,7 +1,7 @@
 {
   "id": "box-monitor",
   "name": "Box monitor",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "contract": 1,
   "description": "DGX Spark health and the training job it runs: GPU %, watts, one writer, loaded models, live step and last-8 rate, durable save, hours to the token floor, fence labels. Read-only.",
   "homepage": "https://github.com/go7studio/workshop-pack-dgx-spark",

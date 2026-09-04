@@ -22,6 +22,7 @@ import socket
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,10 +44,34 @@ WARMUP_S = 60
 LOG_TAIL_BYTES = 256 * 1024
 LOG_TAIL_LINES = 40
 GPU_IDLE_S = 180
+# Owner bearer stays on-box. Only loopback / explicit local hosts are accepted.
+_LOCAL_GATEWAY_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 STEP_RE = re.compile(r"\[step (\d+)\]([^\n]*)")
 KV_RE = re.compile(r"([A-Za-z_/]+)=([^\s]+)")
 
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects so an off-box Location cannot receive the owner bearer."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_GATEWAY_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def gateway_base_ok(base: str) -> bool:
+    try:
+        parsed = urllib.parse.urlparse(base)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in _LOCAL_GATEWAY_HOSTS
 
 def utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -389,17 +414,31 @@ def gateway_models() -> list[str] | None:
         return None
     if not token:
         return None
+    base = GATEWAY.rstrip("/")
+    if not gateway_base_ok(base):
+        return None
 
     def get(path: str) -> tuple[int, str]:
+        if not path.startswith("/") or "://" in path or ".." in path or "?" in path or "#" in path:
+            return 0, ""
+        url = base + path
+        parsed = urllib.parse.urlparse(url)
+        if (parsed.hostname or "").lower() not in _LOCAL_GATEWAY_HOSTS:
+            return 0, ""
+        if parsed.scheme not in ("http", "https") or parsed.query or parsed.fragment:
+            return 0, ""
         req = urllib.request.Request(
-            GATEWAY.rstrip("/") + path,
-            headers={"Authorization": "Bearer " + token},
+            url,
+            headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
             method="GET",
         )
         try:
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            with _GATEWAY_OPENER.open(req, timeout=3) as resp:
                 return resp.status, resp.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
+            # HTTPError is raised for 4xx/5xx without following redirects when NoRedirect returns None.
+            if 300 <= e.code < 400:
+                return e.code, ""
             return e.code, ""
         except (urllib.error.URLError, TimeoutError, OSError):
             return 0, ""
