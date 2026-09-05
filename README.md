@@ -5,7 +5,7 @@ Workshop rail, and the collector that feeds them.
 
 | Pack | Paints |
 | --- | --- |
-| `box-monitor` | GPU %, watts, one writer, loaded models, infer probes, fence labels, and the training job: live step and last-8 rate from the log, the durable save, tokens toward target, hours to the token floor, the trainer's gate, abort flags |
+| `box-monitor` | GPU %, watts, one writer, loaded models, infer probes, fence labels, and the training job: live step and last-8 rate from the log, the durable save, tokens toward the 5 tok/param floor (then steps toward yaml max), hours to floor or yaml max, the trainer's gate, abort flags |
 | `job-log` | The tail of that job's log |
 
 A pack is data. Nothing in this repo runs inside Workhorse. The collector runs
@@ -60,11 +60,23 @@ failed run keeps the last valid file. It reads:
 | Box | `nvidia-smi` name / utilization / power | `gpuUtilPercent`, `powerWatts`, `job.gpuName`. UMA memory is N/A and never invented |
 | Fence | `systemctl --user is-active` on the probe unit, `qwen38-sglang`, `bloom-v40-500m` | `exclusiveSidecar`, `job.fence` |
 
-It also publishes `job.derived` (pct, remain, hours to floor, s/it, steps
-ahead) so the desk only formats, and `job.flags`: `two-trainers`,
-`qwen-up-during-train`, `gpu-idle` (0 % for 3 min with a trainer present),
-`step-backwards`. Never published: the sidecar's whole-run tok/s and
-`latest.json` `tokens_per_sec`. `max_steps` is not an ETA input.
+It also publishes `job.derived` so the desk only formats:
+
+| Field | Meaning |
+| --- | --- |
+| `pctOfFloor` | 100 × live tokens / `target_tokens` (may exceed 100) |
+| `pct` | that ratio clamped at 100 (do not use this as “job done”) |
+| `floorMet` | live tokens ≥ 5 tok/param target |
+| `hoursToFloor` | remain-to-floor / last-8; **0** after the floor |
+| `hoursToMax` | remain steps to yaml `max_steps` / last-8 |
+| `hoursEta` | `hoursToFloor` before the floor, `hoursToMax` after |
+
+`job.flags` includes `two-trainers`, `qwen-up-during-train`, `gpu-idle`
+(0 % for 3 min with a trainer present), `step-backwards`, and `past-floor`.
+Top-level `tokPerParam` and `last8Toks` alias the **live** job row (not the
+durable save). Never published: the sidecar's whole-run tok/s and
+`latest.json` `tokens_per_sec`. Yaml `max_steps` is an ETA input only **after**
+the floor; it is not the 5 tok/param finish.
 
 `GO7_WORKSHOP_WORKLOAD` overrides `~/workloads/creative-llm`;
 `GO7_WORKSHOP_FEED` overrides the output path.

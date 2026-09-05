@@ -240,6 +240,7 @@ def durable(path: Path | None) -> dict | None:
         "targetTokens": _num(data, "target_tokens"),
         "targetTokPerParam": _num(data, "target_tokens_per_param"),
         "tokensPerStep": _num(data, "tokens_per_step"),
+        "maxSteps": _num(data, "max_steps"),
         "paramCount": _num(data, "param_count", "n_params", "params", "parameter_count"),
         "trainLoss": _num(data, "train_loss"),
         "valLoss": _num(data, "val_loss"),
@@ -310,9 +311,10 @@ def live(path: Path | None) -> tuple[dict | None, str | None]:
 def derived(live_row: dict | None, dur: dict | None) -> dict:
     """The widget formulas, published so the desk only formats.
 
-    tpp = tokens_seen / param_count; remain = target − live tokens; pct = 100 × tokens / target;
-    hours_to_floor = remain / last-8 / 3600; s/it = tokens_per_step / last-8. None when an input is missing.
-    Never from the sidecar whole-run rate. job_complete / undertrained_flag are not touched here.
+    Floor = target_tokens (5 tok/param). Yaml max = max_steps × tokens_per_step.
+    After the floor, pctOfFloor may exceed 100; hoursToFloor is 0; hoursToMax and
+    hoursEta keep counting toward yaml max_steps. Never from the sidecar whole-run
+    rate. job_complete / undertrained_flag are not touched here.
     """
     live_row = live_row or {}
     dur = dur or {}
@@ -321,21 +323,49 @@ def derived(live_row: dict | None, dur: dict | None) -> dict:
     target = dur.get("targetTokens")
     rate = live_row.get("last8TokS")
     tpp = live_row.get("tokPerParam")
+    target_tpp = dur.get("targetTokPerParam")
     if tpp is None and tokens is not None and params:
         tpp = tokens / params
     if tpp is None:
         tpp = dur.get("tokPerParam")
     remain = max(0.0, target - tokens) if tokens is not None and target is not None else None
-    pct = min(100.0, 100.0 * tokens / target) if tokens is not None and target else None
-    hours = remain / rate / 3600.0 if remain is not None and rate else None
+    pct_of_floor = 100.0 * tokens / target if tokens is not None and target else None
+    pct = min(100.0, pct_of_floor) if pct_of_floor is not None else None
+    floor_met = False
+    if remain is not None:
+        floor_met = remain <= 0.0
+    elif tpp is not None and target_tpp is not None:
+        floor_met = tpp >= target_tpp
+    hours_floor = None
+    if remain is not None and rate:
+        hours_floor = remain / rate / 3600.0
+    live_step = live_row.get("step")
+    max_steps = dur.get("maxSteps")
+    tok_step = dur.get("tokensPerStep")
+    remain_steps_max = None
+    if live_step is not None and max_steps is not None:
+        remain_steps_max = max(0.0, max_steps - live_step)
+    pct_yaml = None
+    if live_step is not None and max_steps:
+        pct_yaml = min(100.0, 100.0 * live_step / max_steps)
+    hours_max = None
+    if remain_steps_max is not None and tok_step and rate:
+        hours_max = remain_steps_max * tok_step / rate / 3600.0
+    hours_eta = hours_max if floor_met else hours_floor
     sec_per_it = dur["tokensPerStep"] / rate if dur.get("tokensPerStep") is not None and rate else None
     ahead = live_row["step"] - dur["step"] if live_row.get("step") is not None and dur.get("step") is not None else None
     return {
         "tokPerParam": tpp,
-        "targetTokPerParam": dur.get("targetTokPerParam"),
+        "targetTokPerParam": target_tpp,
         "pct": pct,
+        "pctOfFloor": pct_of_floor,
+        "floorMet": floor_met,
         "remainTokens": remain,
-        "hoursToFloor": hours,
+        "hoursToFloor": hours_floor,
+        "hoursToMax": hours_max,
+        "hoursEta": hours_eta,
+        "pctOfYaml": pct_yaml,
+        "remainStepsToMax": remain_steps_max,
         "secPerIt": sec_per_it,
         "stepsAhead": ahead,
     }
@@ -502,6 +532,15 @@ def collect(prev: dict | None = None, now_s: float | None = None) -> dict:
     if models is None:
         errors.append("infer-down-or-unready")
     flags, state = job_flags(nproc, unit, parked, gpu, dur, prev, now_s)
+    derived_row = derived(live_row, dur)
+    if derived_row.get("floorMet"):
+        flags = list(flags) + ["past-floor"]
+    live_tpp = (live_row or {}).get("tokPerParam")
+    if live_tpp is None:
+        live_tpp = derived_row.get("tokPerParam")
+    if live_tpp is None:
+        live_tpp = tpp
+    last8 = (live_row or {}).get("last8TokS")
     return {
         "schema": SCHEMA,
         "asOf": utcnow(),
@@ -510,9 +549,8 @@ def collect(prev: dict | None = None, now_s: float | None = None) -> dict:
         "powerWatts": watts,
         "oneWriter": one,
         "trainNameMatchCount": nproc,
-        "tokPerParam": tpp,
-        # Whole-run tok/s is not a score. The desk reads job.live.last8TokS.
-        "last8Toks": None,
+        "tokPerParam": live_tpp,
+        "last8Toks": last8,
         "latestJson": str(latest) if latest else None,
         "exclusiveSidecar": {"probeUnit": unit, "qwenParked": parked},
         "models": models,
@@ -520,7 +558,7 @@ def collect(prev: dict | None = None, now_s: float | None = None) -> dict:
             "lease": owner,
             "live": live_row,
             "durable": dur,
-            "derived": derived(live_row, dur),
+            "derived": derived_row,
             "fence": fence,
             "flags": flags,
             "gpuName": gpu_name,

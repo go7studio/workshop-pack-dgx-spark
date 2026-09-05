@@ -1,9 +1,9 @@
 {
   "id": "box-monitor",
   "name": "Box monitor",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "contract": 1,
-  "description": "DGX Spark health and the training job it runs: GPU %, watts, one writer, loaded models, live step and last-8 rate, durable save, hours to the token floor, fence labels. Read-only.",
+  "description": "DGX Spark health and the training job it runs: GPU %, watts, one writer, loaded models, live step and last-8 rate, durable save, hours to the token floor or yaml max after the floor, fence labels. Read-only.",
   "homepage": "https://github.com/go7studio/workshop-pack-dgx-spark",
   "collector": "collector",
   "sources": [
@@ -86,10 +86,25 @@
       }
     },
     {
-      "w": "bar",
-      "num": "feed:/job/live/tokensSeen",
-      "den": "feed:/job/durable/targetTokens",
-      "showPct": false
+      "w": "switch",
+      "cases": [
+        {
+          "when": "feed:/job/derived/floorMet",
+          "is": true,
+          "paint": {
+            "w": "bar",
+            "num": "feed:/job/live/step",
+            "den": "feed:/job/durable/maxSteps",
+            "showPct": false
+          }
+        }
+      ],
+      "else": {
+        "w": "bar",
+        "num": "feed:/job/live/tokensSeen",
+        "den": "feed:/job/durable/targetTokens",
+        "showPct": false
+      }
     },
     {
       "w": "text",
@@ -98,9 +113,23 @@
       "suffix": " tpp"
     },
     {
-      "w": "text",
-      "of": "feed:/job/derived/hoursToFloor",
-      "fmt": "hours"
+      "w": "switch",
+      "cases": [
+        {
+          "when": "feed:/job/derived/floorMet",
+          "is": true,
+          "paint": {
+            "w": "text",
+            "of": "feed:/job/derived/hoursToMax",
+            "fmt": "hours"
+          }
+        }
+      ],
+      "else": {
+        "w": "text",
+        "of": "feed:/job/derived/hoursToFloor",
+        "fmt": "hours"
+      }
     },
     {
       "w": "flags",
@@ -109,7 +138,8 @@
         "two-trainers": "two trainers",
         "qwen-up-during-train": "qwen up",
         "gpu-idle": "gpu idle",
-        "step-backwards": "step back"
+        "step-backwards": "step back",
+        "past-floor": "past floor"
       }
     }
   ],
@@ -283,7 +313,8 @@
           "two-trainers": "two trainers",
           "qwen-up-during-train": "qwen up",
           "gpu-idle": "gpu idle",
-          "step-backwards": "step back"
+          "step-backwards": "step back",
+          "past-floor": "past floor"
         }
       },
       "rows": [
@@ -311,10 +342,25 @@
           }
         },
         {
-          "w": "bar",
-          "num": "feed:/job/live/tokensSeen",
-          "den": "feed:/job/durable/targetTokens",
-          "label": "tokens seen toward target"
+          "w": "switch",
+          "cases": [
+            {
+              "when": "feed:/job/derived/floorMet",
+              "is": true,
+              "paint": {
+                "w": "bar",
+                "num": "feed:/job/live/step",
+                "den": "feed:/job/durable/maxSteps",
+                "label": "steps toward yaml max"
+              }
+            }
+          ],
+          "else": {
+            "w": "bar",
+            "num": "feed:/job/live/tokensSeen",
+            "den": "feed:/job/durable/targetTokens",
+            "label": "tokens seen toward 5 tok/param"
+          }
         },
         {
           "w": "pair",
@@ -400,14 +446,34 @@
           }
         },
         {
-          "w": "kv",
-          "label": "To floor",
-          "of": "feed:/job/derived/hoursToFloor",
-          "fmt": "hours",
-          "title": {
-            "of": "feed:/job/derived/remainTokens",
-            "fmt": "tokens",
-            "suffix": " tokens remain"
+          "w": "switch",
+          "cases": [
+            {
+              "when": "feed:/job/derived/floorMet",
+              "is": true,
+              "paint": {
+                "w": "kv",
+                "label": "Past floor",
+                "of": "feed:/job/derived/hoursToMax",
+                "fmt": "hours",
+                "title": {
+                  "of": "feed:/job/derived/remainStepsToMax",
+                  "fmt": "int",
+                  "suffix": " steps to yaml max"
+                }
+              }
+            }
+          ],
+          "else": {
+            "w": "kv",
+            "label": "To floor",
+            "of": "feed:/job/derived/hoursToFloor",
+            "fmt": "hours",
+            "title": {
+              "of": "feed:/job/derived/remainTokens",
+              "fmt": "tokens",
+              "suffix": " tokens remain"
+            }
           }
         },
         {
@@ -448,6 +514,18 @@
                 "value": "undertrained",
                 "title": {
                   "value": "job_complete / undertrained_flag as the trainer wrote them"
+                }
+              }
+            },
+            {
+              "when": "feed:/job/derived/floorMet",
+              "is": true,
+              "paint": {
+                "w": "kv",
+                "label": "Gate",
+                "value": "floor met",
+                "title": {
+                  "value": "5 tok/param floor is met live; quality_gate is a separate held-out pass"
                 }
               }
             },
