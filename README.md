@@ -11,6 +11,11 @@ Workshop rail, and the collector that feeds them.
 A pack is data. Nothing in this repo runs inside Workhorse. The collector runs
 on the Spark, installed by you.
 
+Optional **call** skill (not a Workshop pack, not shipped with the desk):
+`skills/dgx-spark`. Workhorse → Settings → Skills → **Import** that folder.
+NVIDIA Sync is SSH; the skill collects `/v1/models` and registers Qwen. One
+Import per desk; several Sparks use distinct ids and local ports.
+
 ## Install the packs (desk)
 
 Workhorse → Settings → Skills → Workshop → **Add pack** → paste
